@@ -112,7 +112,7 @@ class JuliaWorker(QThread):
 
 # ------------------------ Main GUI ----------------------
 class MainWin(QMainWindow):
-    def __init__(self):
+    def __init__(self, enable_gpu: bool = True):
         super().__init__()
         self.setWindowTitle("3-D Deconvolution (Julia back-end)")
         self.resize(900, 650)
@@ -162,6 +162,9 @@ class MainWin(QMainWindow):
 
         self.cb_gpu = QCheckBox("GPU")
         row.addWidget(self.cb_gpu)
+        self.cb_gpu.setEnabled(enable_gpu)
+        if not enable_gpu:
+            self.cb_gpu.hide()
 
         self.btn_run = QPushButton("Run")
         self.btn_run.setEnabled(False)
@@ -254,7 +257,14 @@ class MainWin(QMainWindow):
 
 # ---------------- main -----------------------
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="3-D Deconvolution GUI")
+    parser.add_argument("--nogpu", action="store_true",
+                        help="Hide GPU option (use on Raspberry Pi)")
+    args = parser.parse_args()
+
     app = QApplication(sys.argv)
-    w   = MainWin()
+    w   = MainWin(enable_gpu=not args.nogpu)
     w.show()
     sys.exit(app.exec_())
