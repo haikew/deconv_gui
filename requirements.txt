@@ -1,4 +1,4 @@
-numpy
-tifffile
-PyQt5
-matplotlib
+numpy>=1.19
+matplotlib>=3.3
+tifffile>=2021.4
+PyQt5>=5.15

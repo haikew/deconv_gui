@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deconv_gui"
+version = "0.1.0"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+description = "Simple GUI for 3-D deconvolution using a Julia backend"
+readme = "README.md"
+authors = [{name = "Haiyue Li", email = "lihaiyue0517@gmail.com"}]
+dependencies = [
+    "numpy>=1.19",
+    "matplotlib>=3.3",
+    "tifffile>=2021.4",
+    "PyQt5>=5.15"
+]
+
+[project.scripts]
+deconv-gui = "deconvolution_gui:main"

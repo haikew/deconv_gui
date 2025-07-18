@@ -256,15 +256,23 @@ class MainWin(QMainWindow):
 
 
 # ---------------- main -----------------------
-if __name__ == "__main__":
+def main(argv=None):
+    """Entry point for the GUI."""
     import argparse
 
     parser = argparse.ArgumentParser(description="3-D Deconvolution GUI")
-    parser.add_argument("--nogpu", action="store_true",
-                        help="Hide GPU option (use on Raspberry Pi)")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--nogpu",
+        action="store_true",
+        help="Hide GPU option (use on Raspberry Pi)",
+    )
+    args = parser.parse_args(argv)
 
     app = QApplication(sys.argv)
-    w   = MainWin(enable_gpu=not args.nogpu)
+    w = MainWin(enable_gpu=not args.nogpu)
     w.show()
-    sys.exit(app.exec_())
+    return app.exec_()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
