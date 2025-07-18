@@ -151,13 +151,13 @@ class MainWin(QMainWindow):
         row.addWidget(QLabel("Iter:"))
         self.sp_iter = QSpinBox()
         self.sp_iter.setRange(1, 200)
-        self.sp_iter.setValue(40)
+        self.sp_iter.setValue(20)
         row.addWidget(self.sp_iter)
 
         row.addWidget(QLabel("σz:"))
         self.sp_sig = QSpinBox()
         self.sp_sig.setRange(1, 50)
-        self.sp_sig.setValue(12)
+        self.sp_sig.setValue(15)
         row.addWidget(self.sp_sig)
 
         self.cb_gpu = QCheckBox("GPU")
@@ -193,9 +193,20 @@ class MainWin(QMainWindow):
             return
         self.stack_path = f
         stack = tiff.imread(f)
-        proj  = stack.max(axis=0)
-        self.roi_widget.set_image((proj - proj.min()) / np.ptp(proj))
+
+    # ---------- Only this block is modified ----------
+    # Combine all Z‑planes by summing them
+        proj = stack.sum(axis=0, dtype=np.float32)
+
+        # Normalize by the brightest pixel in the summed image
+        max_val = proj.max()
+        proj_norm = proj / max_val if max_val else np.zeros_like(proj, dtype=np.float32)
+        # -------------------------------------------------
+
+        self.roi_widget.set_image(proj_norm)
         self.lbl_info.setText(f"Loaded {f}  shape={stack.shape}")
+
+
 
     def set_roi(self, roi):
         self.roi_xy = roi
@@ -207,10 +218,20 @@ class MainWin(QMainWindow):
             "using Images, DeconvOptim, PointSpreadFunctions; "
             'println("warm-up ok")'
         )
-        subprocess.run([self.julia_exe, f"--project={self.proj_dir}", "-e", code])
-        QMessageBox.information(
-            self, "Warm-up", "Julia packages precompiled / loaded."
+        # Launch Julia warm‑up
+        res = subprocess.run(
+            [self.julia_exe, f"--project={self.proj_dir}", "-e", code],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
         )
+        # Check exit code and output to determine success
+        if res.returncode == 0 and "warm-up ok" in res.stdout:
+            QMessageBox.information(self, "Warm‑up", "Julia warm‑up succeeded")
+        else:
+            err_msg = res.stderr.strip() or res.stdout.strip() or "Unknown error"
+            QMessageBox.critical(self, "Warm‑up Failed", f"Warm‑up failed:\n{err_msg}")
+
 
     def run_deconv(self):
         if not (self.stack_path and self.roi_xy):
