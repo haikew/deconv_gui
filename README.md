@@ -3,7 +3,22 @@
 This repository contains a small GUI written in **Python** that delegates the
 deconvolution work to a **Julia** script.
 
-## Installation
+## Installation on PC
+
+In powershell
+```
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+install julia from https://julialang.org/install/
+```
+julia --project=. -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"
+```
+Install the Julia dependencies without CUDA:
+
+
+## Installation on Raspberry Pi
 
 Create a Python virtual environment and install the required packages:
 
@@ -13,13 +28,18 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Install the Julia dependencies:
+Install julia by
 
-```bash
-julia --project=julia -e 'using Pkg; Pkg.add(["ArgParse","Images","FileIO","TiffImages","DeconvOptim","PointSpreadFunctions","FFTW","CUDA","Colors"])'
+```
+curl -fsSL https://install.julialang.org | sh
 ```
 
-If your system does not provide a CUDA capable device you can omit `CUDA`.
+
+```bash
+julia --project=. -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"
+```
+
+
 
 ## Usage
 

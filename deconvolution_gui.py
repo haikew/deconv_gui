@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QMainWindow
 )
 
-# ---------------- matplotlib ROI widget -----------------
+# ---------------- matplotlib ROI widget -----------------  
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
@@ -44,31 +44,39 @@ class ROIWidget(QWidget):
         self.fig, self.ax = plt.subplots()
         self.canvas = FigureCanvasQTAgg(self.fig)
         self.ax.set_axis_off()
+        # Set up the rectangle selector for ROI selection
         self.selector = RectangleSelector(
             self.ax, self._on_select,
             useblit=True, button=[1], minspanx=10, minspany=10,
             interactive=True
         )
+        # lay is the layout for this widget
         lay = QVBoxLayout(self)
         lay.addWidget(self.canvas)
         self.img = None
 
     def set_image(self, img):
         self.img = img
+        # Clear and hide the axes, then display the image
         self.ax.clear()
         self.ax.set_axis_off()
+        # make the image grayscale and sharp
         self.ax.imshow(img, cmap="gray", interpolation="nearest")
+        # Redraw the canvas to show the new image when it is not busy
         self.canvas.draw_idle()
 
     def _on_select(self, e0, e1):
         x0, x1 = sorted([int(e0.xdata), int(e1.xdata)])
         y0, y1 = sorted([int(e0.ydata), int(e1.ydata)])
+        # Emit the ROI coordinates only if they are large enough
         if (x1 - x0) >= 10 and (y1 - y0) >= 10:
+            # use emit to notify the main window about the ROI change
             self.roi_changed.emit((x0, x1, y0, y1))
 
 
 # -------------- Julia worker thread ---------------------
 class JuliaWorker(QThread):
+    # Send a progress update (0–100)
     progress    = pyqtSignal(int)
     finished_ok = pyqtSignal(str)
     error       = pyqtSignal(str)
@@ -82,6 +90,7 @@ class JuliaWorker(QThread):
         proj_dir = self.p["proj"]
         script   = proj_dir / "deconv_cli.jl"
         roi_str  = f"{self.p['x0']}:{self.p['x1']},{self.p['y0']}:{self.p['y1']}"
+        # prepare the command line arguments for the Julia script
         cmd = [
             self.p["julia"], f"--project={proj_dir}", str(script),
             "--roi", roi_str,
@@ -91,7 +100,7 @@ class JuliaWorker(QThread):
             "--sigma_z", str(self.p["sigmaz"]),
             self.p["input"], self.p["output"],
         ]
-
+        # open a subprocess to run the Julia script line by line
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
@@ -100,8 +109,8 @@ class JuliaWorker(QThread):
             log.append(line)
             m = prog_re.match(line)
             if m:
-                self.progress.emit(int(m.group(1)))
-
+                self.progress.emit(int(m.group(1)))     
+        # Wait for the process to finish and check the exit code
         proc.wait()
         out = "".join(log)
         if proc.returncode == 0:
@@ -112,13 +121,13 @@ class JuliaWorker(QThread):
 
 # ------------------------ Main GUI ----------------------
 class MainWin(QMainWindow):
+    # main window for the deconvolution GUI
     def __init__(self, enable_gpu: bool = True):
         super().__init__()
-        self.setWindowTitle("3-D Deconvolution (Julia back-end)")
+        self.setWindowTitle("Deconvolution with ROI Selection (Julia back-end)")
         self.resize(900, 650)
-
+        # Set the directory where the Julia project is located
         SCRIPT_DIR = Path(__file__).resolve().parent
-        # Crucial fix: point exactly to the julia subdirectory
         self.proj_dir  = SCRIPT_DIR / "julia"
         # If the executable is not in PATH, change this to the absolute path
         self.julia_exe = "julia"
@@ -128,9 +137,10 @@ class MainWin(QMainWindow):
         self.setCentralWidget(cw)
         vbox = QVBoxLayout(cw)
 
+        # ROI widget
         self.roi_widget = ROIWidget()
         vbox.addWidget(self.roi_widget, 1)
-
+        # display the default information of the loaded image
         self.lbl_info = QLabel("No file loaded")
         vbox.addWidget(self.lbl_info)
 
@@ -138,6 +148,7 @@ class MainWin(QMainWindow):
         row = QHBoxLayout()
         vbox.addLayout(row)
 
+        # load all buttons and give them default values
         self.btn_load = QPushButton("Load 3-D TIFF…")
         row.addWidget(self.btn_load)
         self.btn_load.clicked.connect(self.load_stack)
@@ -194,31 +205,33 @@ class MainWin(QMainWindow):
         self.stack_path = f
         stack = tiff.imread(f)
 
-    # ---------- Only this block is modified ----------
+    # preview the stack algorithm
     # Combine all Z‑planes by summing them
         proj = stack.sum(axis=0, dtype=np.float32)
 
         # Normalize by the brightest pixel in the summed image
         max_val = proj.max()
         proj_norm = proj / max_val if max_val else np.zeros_like(proj, dtype=np.float32)
-        # -------------------------------------------------
 
         self.roi_widget.set_image(proj_norm)
         self.lbl_info.setText(f"Loaded {f}  shape={stack.shape}")
 
-
-
+    # Reset the ROI and enable the run button
     def set_roi(self, roi):
         self.roi_xy = roi
         self.lbl_info.setText(f"ROI set: x{roi[0]}–{roi[1]}, y{roi[2]}–{roi[3]}")
         self.btn_run.setEnabled(True)
 
+    # Run the Julia warm-up script to ensure all packages are installed
     def warmup(self):
+        # Prepare the Julia warm-up script
         code = (
-            "using Images, DeconvOptim, PointSpreadFunctions; "
-            'println("warm-up ok")'
+                "using Pkg; "
+                "Pkg.activate(\".\"); "
+                "Pkg.instantiate(); "
+                'println("Julia core warm-up is done")'
         )
-        # Launch Julia warm‑up
+        # Launch Julia warm-up script
         res = subprocess.run(
             [self.julia_exe, f"--project={self.proj_dir}", "-e", code],
             stdout=subprocess.PIPE,
@@ -234,15 +247,17 @@ class MainWin(QMainWindow):
 
 
     def run_deconv(self):
+        # Check if the stack and ROI are set
         if not (self.stack_path and self.roi_xy):
             return
-
+        
+        # Ask the user for the output file name
         out, _ = QFileDialog.getSaveFileName(
             self, "Save result as", "deconv.tif", "TIFF (*.tif)"
         )
         if not out:
             return
-
+        # Prepare the parameters for the Julia worker
         p = dict(
             proj   = self.proj_dir,
             julia  = self.julia_exe,
@@ -260,19 +275,22 @@ class MainWin(QMainWindow):
         self.bar.setValue(0)
         self.btn_run.setEnabled(False)
 
+        # Create and start the Julia worker thread
         self.th = JuliaWorker(p)
         self.th.progress.connect(self.bar.setValue)
         self.th.finished_ok.connect(self.finished)
         self.th.error.connect(self.err)
         self.th.start()
 
+    # send a message to the user when the deconvolution is finished
     def finished(self, path):
         QMessageBox.information(self, "Done", f"Saved: {path}")
         self.bar.setValue(100)
         self.btn_run.setEnabled(True)
 
+    # Show an error message if the Julia script fails
     def err(self, log):
-        QMessageBox.critical(self, "Julia error", textwrap.shorten(log, 4000))
+        QMessageBox.critical(self, "Julia error", textwrap.shorten(log, 8000))
         self.btn_run.setEnabled(True)
 
 
@@ -281,6 +299,8 @@ def main(argv=None):
     """Entry point for the GUI."""
     import argparse
 
+    # Parse command-line arguments
+    # on Raspberry Pi, we hide the GPU option with --nogpu
     parser = argparse.ArgumentParser(description="3-D Deconvolution GUI")
     parser.add_argument(
         "--nogpu",

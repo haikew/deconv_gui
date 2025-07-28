@@ -1,9 +1,10 @@
 #!/usr/bin/env julia
 # deconv_cli.jl — called from the Python GUI
-#
+# recieves parameters from the python GUI subprocess, read by command line arguments
+# and performs 3-D deconvolution using the Richardson-Lucy algorithm. 
 # Usage example:
 #   julia --project=. deconv_cli.jl --roi 100:612,200:712 --zsize 64 \
-#         --iter 40 --gpu false --sigma_z 12 input.tif output.tif
+#         --iter 20 --gpu false --sigma_z 15 input.tif output.tif
 
 using ArgParse
 using Images, FileIO, TiffImages
@@ -16,6 +17,7 @@ using FFTW, CUDA, Colors, Printf
 """Crop a 3-D array to (x0:x1, y0:y1, central z-slice of length `zsize`)."""
 function crop_xy_z(arr, x0, x1, y0, y1, zsize)
     nx, ny, nz = size(arr)
+    # Check bounds
     @assert zsize ≤ nz "zsize larger than stack depth"
     z0 = (nz - zsize) ÷ 2 + 1
     copy(@view arr[x0:x1, y0:y1, z0:z0+zsize-1])
@@ -26,9 +28,9 @@ p = ArgParseSettings()
 @add_arg_table p begin
     "--roi"     ; default = ""                 # x0:x1,y0:y1  (1-based indexing)
     "--zsize"   ; arg_type = Int     ; default = 64
-    "--iter"    ; arg_type = Int     ; default = 40
+    "--iter"    ; arg_type = Int     ; default = 20
     "--gpu"     ; arg_type = Bool    ; default = false
-    "--sigma_z" ; arg_type = Float64 ; default = 12.0
+    "--sigma_z" ; arg_type = Float64 ; default = 15.0
     "input"                                   # input TIFF file
     "output"                                  # output TIFF file
 end
@@ -67,7 +69,8 @@ psf_roi = use_gpu ? CuArray(psf_roi) : psf_roi
 
 # ----------------------- RL iterative ----------------------------
 @info "Starting RL" iterations = args["iter"] gpu = use_gpu
-println("PROGRESS 0")          # reset progress bar on the Python side
+# reset progress bar on the Python side
+println("PROGRESS 0")          
 deconv = richardson_lucy_iterative(
     roi, psf_roi;
     iterations  = args["iter"],
@@ -75,7 +78,8 @@ deconv = richardson_lucy_iterative(
     conv_dims   = 1:3,
     regularizer = nothing,
 )
-println("PROGRESS 100")        # tell the Python side we are done
+# tell the Python side we are done
+println("PROGRESS 100")        
 
 # ----------------------- save TIFF -------------------------------
 res  = Array(deconv)
